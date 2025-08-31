@@ -16,7 +16,6 @@ import json
 import os
 from typing import List, Dict
 
-
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # 把这些用绝对路径（避免从 client.py 不同的 cwd 导致写到别处）
@@ -310,3 +309,4 @@ def query_bm25(inverted_index: InvertedIndex, files_path: str, query_term: str, 
         res.append((url if url else fname, score))
 
     return res
+
