@@ -10,26 +10,12 @@ import pickle
 import json
 from tqdm import tqdm
 from bs4 import BeautifulSoup
-from url_normalize import url_normalize
 import jieba
 import re
 import json
 import os
 from typing import List, Dict
-import threading
-from urllib.parse import urlparse, urlunparse
 
-DEFAULT_HEADERS = {
-    'User-Agent': ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-                   'AppleWebKit/537.36 (KHTML, like Gecko) '
-                   'Chrome/91.0.4472.124 Safari/537.36')
-}
-
-ALLOWED_DOMAINS = ["keyan.ruc.edu.cn", "xsc.ruc.edu.cn"]
-
-lock = threading.Lock()  
-count = 0      
-seen_hashes = set()
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -131,7 +117,7 @@ class InvertedIndex:
         self.avgdl = sum(self.doc_length) / max(1, self.doc_count)
 
     def bm25_search(self, query: str, k1=1.5, b=0.8, k=20, allowed_docs: set=None):
-        # 若尚未计算 avgdl，自动计算一次（防止调用时忘记）
+        # 若尚未计算 avgdl，自动计算一次
         if not getattr(self, "avgdl", 0):
             try:
                 self.compute_avgdl()
@@ -227,10 +213,9 @@ class InvertedIndex:
         return self.doc_length
 
 def build_or_load_index():
-    # 调试信息，显示当前工作目录和目标 index 路径
     print("DEBUG: 当前工作目录 cwd =", os.getcwd())
     print("DEBUG: INDEX_FILE 绝对路径 =", INDEX_FILE)
-    # 尝试从磁盘加载
+
     if os.path.exists(INDEX_FILE) and os.path.getsize(INDEX_FILE) > 0:
         try:
             with open(INDEX_FILE, "rb") as f:
@@ -248,16 +233,16 @@ def build_or_load_index():
                 print("DEBUG: index.pkl 内容不是 InvertedIndex（可能旧格式或在 __main__ 时保存），将重建索引")
         except Exception as e:
             print("DEBUG: 加载 index.pkl 失败，错误：", repr(e))
-            # 继续走重建逻辑
+            
 
-    # 重建索引
+    
     print("DEBUG: 正在构建索引，这可能需要一段时间…")
     inv = InvertedIndex()
     inv.build_index(HTML_PATH)
     inv.get_length(HTML_PATH)
     inv.compute_avgdl()
 
-    # 检查写权限
+    
     try:
         dirpath = os.path.dirname(INDEX_FILE) or "."
         if not os.access(dirpath, os.W_OK):
@@ -265,18 +250,17 @@ def build_or_load_index():
     except Exception:
         pass
 
-    # 原子写入并捕捉异常
+
     try:
         _safe_pickle_dump(inv, INDEX_FILE)
     except Exception:
         import traceback; traceback.print_exc()
         print("WARNING: 虽然构建成功但保存 index.pkl 失败（请检查权限与磁盘）。返回内存索引。")
 
-    print("索引构建完成 ✅")
+    print("索引构建完成")
     return inv
 
 def query_or(inverted_index: InvertedIndex, files_path: str, query_term: str, k: int = 20):
-    # 使用 BM25 搜索
     results = inverted_index.bm25_search(query_term, k=k)
     
     urls = []
@@ -291,7 +275,7 @@ def query_or(inverted_index: InvertedIndex, files_path: str, query_term: str, k:
 
 
 def query_and(inverted_index: InvertedIndex, files_path: str, query_term: str, k: int = 20):
-    # 先找包含所有词的文档
+
     query_terms = [t for t in jieba.lcut(query_term) if t in inverted_index.index]
     if not query_terms:
         return []
@@ -301,7 +285,6 @@ def query_and(inverted_index: InvertedIndex, files_path: str, query_term: str, k
     if not common_docs:
         return []
 
-    # 使用 BM25，但限制只在 common_docs 内搜索
     results = inverted_index.bm25_search(query_term, k=k, allowed_docs=common_docs)
 
     urls = []
