@@ -125,7 +125,7 @@ class InvertedIndex:
     def compute_avgdl(self):
         self.avgdl = sum(self.doc_length) / max(1, self.doc_count)
 
-    def bm25_search(self, query: str, k1=1.5, b=0.8, k=20, allowed_docs: set=None):
+    def bm25_search(self, query: str, k1=1.5, b=0.5, k=20, allowed_docs: set=None):
         # 若尚未计算 avgdl，自动计算一次
         if not getattr(self, "avgdl", 0):
             try:
@@ -202,7 +202,8 @@ class InvertedIndex:
 
         for docid, filename in enumerate(htmls):
             with open(os.path.join(html_path, filename), "r", encoding="utf-8") as f:
-                terms = jieba.lcut(get_text(os.path.join(html_path, filename)))
+                title, content = get_text(os.path.join(html_path, filename))
+                terms = jieba.lcut(content)
 
             term_counts = Counter()
             for term in terms:
