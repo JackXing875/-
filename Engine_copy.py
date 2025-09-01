@@ -175,7 +175,8 @@ class InvertedIndex:
         print(f"共发现 {self.doc_count} 个文档，开始建立索引…")
 
         for docid, filename in enumerate(tqdm(files, desc="Building index")):
-            terms = jieba.lcut(get_text(os.path.join(html_path, filename)))
+            title, content = get_text(os.path.join(html_path, filename))
+            terms = jieba.lcut(content)  
             seen = set()
             for term in terms:
                 term = term.strip()
