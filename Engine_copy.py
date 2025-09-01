@@ -125,7 +125,7 @@ class InvertedIndex:
     def compute_avgdl(self):
         self.avgdl = sum(self.doc_length) / max(1, self.doc_count)
 
-    def bm25_search(self, query: str, k1=1.5, b=0.5, k=20, allowed_docs: set=None):
+    def bm25_search(self, query: str, k1=1.2, b=0.75, k=20, allowed_docs: set=None):
         # 若尚未计算 avgdl，自动计算一次
         if not getattr(self, "avgdl", 0):
             try:
