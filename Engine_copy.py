@@ -1,5 +1,5 @@
 import re
-from typing import List, Dict
+from typing import List, Dict, Tuple
 from bs4 import BeautifulSoup
 import jieba
 import heapq
@@ -15,6 +15,7 @@ import re
 import json
 import os
 from typing import List, Dict
+
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -52,14 +53,23 @@ def _safe_pickle_dump(obj, path):
         print("ERROR: 写入 index.pkl 失败：", repr(e))
         raise
 
-def get_text(fpath: str) -> str:
+def get_text(fpath: str) -> Tuple[str, str]:
     """读取HTML"""
     with open(fpath, "r", encoding="utf-8") as f:
         html = f.read()
     soup = BeautifulSoup(html, "lxml")
-    title = soup.title.string if soup.title else ""
-    body = " ".join([p.get_text() for p in soup.find_all('p')])
-    return title + " " + body
+
+    # 标题
+    title = soup.title.string.strip() if soup.title else ""
+
+    if title in ["科研处", "中国人民大学科研处"]:
+        h3 = soup.find("h3")
+        if h3 and h3.get_text(strip=True):
+            title = h3.get_text(strip=True)
+
+    body = " ".join(p.get_text(strip=True) for p in soup.find_all("p"))
+
+    return title, body
 
 def get_postings_list(inverted_index: Dict[str, List[Dict[str, int]]], term: str) -> List[Dict[str, int]]:
     """获取某个词的倒排列表"""
@@ -262,39 +272,67 @@ def build_or_load_index():
 def query_or(inverted_index: InvertedIndex, files_path: str, query_term: str, k: int = 20):
     results = inverted_index.bm25_search(query_term, k=k)
     
-    urls = []
+    output = []
     files = [f for f in os.listdir(files_path) if f.endswith(('.html', '.htm'))]
     files.sort()
     
     for docid, score in results:
         fname = files[docid]
-        urls.append(filename_to_url.get(fname, fname))
+        fpath = os.path.join(files_path, fname)
+        
+        # 提取标题和正文
+        title, body = get_text(fpath)
+        snippet = body[:150] + "..." if len(body) > 150 else body
+        
+        # 转换文件名为url
+        url = filename_to_url.get(fname, fname)
+        
+        output.append({
+            "title": title if title else fname,
+            "snippet": snippet,
+            "url": url
+        })
     
-    return urls
+    return output
+
 
 
 def query_and(inverted_index: InvertedIndex, files_path: str, query_term: str, k: int = 20):
-
+    # 分词并过滤出在索引里的词
     query_terms = [t for t in jieba.lcut(query_term) if t in inverted_index.index]
     if not query_terms:
         return []
 
+    # 获取每个词的文档集合
     doc_sets = [set(p.docid for p in get_postings_list(inverted_index.index, t)) for t in query_terms]
     common_docs = set.intersection(*doc_sets)
     if not common_docs:
         return []
 
+    # 只在交集文档中做 BM25 检索
     results = inverted_index.bm25_search(query_term, k=k, allowed_docs=common_docs)
 
-    urls = []
+    output = []
     files = [f for f in os.listdir(files_path) if f.endswith(('.html', '.htm'))]
     files.sort()
-    
+
     for docid, score in results:
         fname = files[docid]
-        urls.append(filename_to_url.get(fname, fname))
-    
-    return urls
+        fpath = os.path.join(files_path, fname)
+
+        # 提取标题和正文
+        title, body = get_text(fpath)
+        snippet = body[:150] + "..." if len(body) > 150 else body
+
+        url = filename_to_url.get(fname, fname)
+
+        output.append({
+            "title": title if title else fname,
+            "snippet": snippet,
+            "url": url
+        })
+
+    return output
 
 
 def query_bm25(inverted_index: InvertedIndex, files_path: str, query_term: str, k: int = 10):
@@ -309,4 +347,3 @@ def query_bm25(inverted_index: InvertedIndex, files_path: str, query_term: str, 
         res.append((url if url else fname, score))
 
     return res
-
