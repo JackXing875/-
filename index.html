@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>搜索引擎</title>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      margin: 0; padding: 0;
+      background: #f9fafb;
+    }
+    .wrap { max-width: 860px; margin: 60px auto; padding: 0 16px; }
+    .card {
+      background: #fff; border-radius: 20px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.08);
+      padding: 28px 32px;
+      animation: fadeIn .6s ease;
+    }
+    @keyframes fadeIn { from {opacity:0; transform:translateY(10px);} to {opacity:1; transform:translateY(0);} }
+    .title { font-size: 28px; margin: 0 0 20px; font-weight: 600; color: #111827; }
+    .row { display: flex; gap: 10px; }
+    .row input {
+      flex: 1; padding: 14px 16px;
+      border: 1px solid #d1d5db; border-radius: 14px;
+      font-size: 16px; transition: all .2s;
+    }
+    .row input:focus { border-color: #2563eb; outline: none; box-shadow: 0 0 0 3px rgba(37,99,235,.2); }
+    .row button {
+      padding: 14px 20px; border: none; border-radius: 14px;
+      cursor: pointer; background: #2563eb; color: #fff;
+      font-size: 16px; font-weight: 500;
+      transition: background .2s;
+    }
+    .row button:hover { background: #1e40af; }
+    .modes { display: flex; gap: 8px; margin: 12px 0 8px; }
+    .mode {
+      padding: 6px 12px; border-radius: 999px;
+      border: 1px solid #d1d5db; cursor: pointer; font-size: 13px;
+      transition: all .2s;
+    }
+    .mode.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+    .hint { margin: 10px 0; color: #6b7280; font-size: 13px; }
+    ul { list-style: none; padding: 0; margin: 20px 0 0; }
+    li { padding: 16px 0; border-bottom: 1px solid #f1f5f9; }
+    .result-title {
+      font-size: 18px; font-weight: 500;
+      color: #2563eb; text-decoration: none;
+    }
+    .result-title:hover { text-decoration: underline; }
+    .snippet { display: block; margin: 6px 0; font-size: 14px; color: #374151; line-height: 1.5; }
+    .url { font-size: 13px; color: #059669; }
+  </style>
+</head>
+<body>
+{% raw %}
+<div id="app" class="wrap">
+  <div class="card">
+    <h1 class="title" style="text-align: center;">哈基米搜索引擎</h1>
+    <div class="modes">
+      <span class="mode" :class="{active: mode==='auto'}" @click="mode='auto'">自动</span>
+      <span class="mode" :class="{active: mode==='and'}" @click="mode='and'">AND（且）</span>
+      <span class="mode" :class="{active: mode==='or'}" @click="mode='or'">OR（或）</span>
+    </div>
+    <div class="row">
+      <input v-model.trim="q" placeholder="输入关键词，如：经济与金融…" @keyup.enter="doSearch" />
+      <button @click="doSearch" :disabled="loading">{{ loading ? '搜索中…' : '搜索' }}</button>
+    </div>
+    <div class="hint">提示：自动模式会根据“和/与/且/并且/以及/同时”和“或/或者”来判定 AND / OR。</div>
+    <div v-if="items.length===0 && !loading" class="hint">暂无结果</div>
+    <ul>
+      <li v-for="(it, i) in items" :key="i">
+        <a class="result-title" :href="it.url || '#'" target="_blank" rel="noopener">{{ it.title || it.url }}</a>
+        <span class="snippet">{{ it.snippet }}</span>
+        <span class="url">{{ it.url }}</span>
+      </li>
+    </ul>
+  </div>
+</div>
+{% endraw %}
+
+<script>
+const { createApp, ref } = Vue
+createApp({
+  setup() {
+    const q = ref('')
+    const mode = ref('auto')
+    const items = ref([])
+    const loading = ref(false)
+
+    async function doSearch() {
+      if (!q.value) { items.value = []; return }
+      loading.value = true
+      try {
+        const params = new URLSearchParams({ q: q.value, mode: mode.value })
+        const resp = await fetch(`/api/search?${params.toString()}`)
+        const data = await resp.json()
+        items.value = data.items || []
+        if (mode.value === 'auto' && data.mode) mode.value = data.mode
+      } catch (e) {
+        console.error(e)
+        items.value = []
+      } finally {
+        loading.value = false
+      }
+    }
+
+    return { q, mode, items, loading, doSearch }
+  }
+}).mount('#app')
+</script>
+</body>
+</html>
