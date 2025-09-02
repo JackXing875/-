@@ -48,19 +48,32 @@ def _safe_pickle_dump(obj, path):
         raise
 
 def get_text(fpath: str) -> Tuple[str, str]:
-    """读取HTML"""
+    """读取HTML并返回 (标题, 正文+meta信息)"""
     with open(fpath, "r", encoding="utf-8") as f:
         html = f.read()
     soup = BeautifulSoup(html, "lxml")
 
     title = soup.title.string.strip() if soup.title else ""
 
+    # 针对科研处等情况
     if title in ["科研处", "中国人民大学科研处"]:
         h3 = soup.find("h3")
         if h3 and h3.get_text(strip=True):
             title = h3.get_text(strip=True)
 
+    # 提取正文
     body = " ".join(p.get_text(strip=True) for p in soup.find_all("p"))
+
+    # 提取 meta keywords 和 description
+    meta_keywords = " ".join([m["content"] for m in soup.find_all("meta", attrs={"name": "keywords"}) if m.get("content")])
+    meta_description = " ".join([m["content"] for m in soup.find_all("meta", attrs={"name": "description"}) if m.get("content")])
+
+    # 将 meta 信息拼接到正文（可以给它加权重）
+    extra = (meta_keywords + " ") * 3 + (meta_description + " ") * 2
+    body = extra + body  
+
+    return title, body
+
 
     return title, body
 
@@ -91,7 +104,7 @@ class InvertedIndex:
     def get_avgdl(self):
         self.avgdl = sum(self.doc_length) / max(1, self.doc_count)
 
-    def bm25_search(self, query: str, k1=1.2, b=0.75, k=20, allowed_docs: set=None):
+    def bm25_search(self, query: str, k1=0.6, b=0.6, k=20, allowed_docs: set=None):
         # 若尚未计算 avgdl，自动计算
         if not getattr(self, "avgdl", 0):
             try:
@@ -99,7 +112,7 @@ class InvertedIndex:
             except Exception:
                 self.avgdl = 1.0 
 
-        tokens = [t for t in jieba.lcut(query) if len(t) > 1 and t not in stopwords]
+        tokens = [t for t in jieba.cut_for_search(query) if len(t) > 1 and t not in stopwords]
         qtf = Counter(tokens)
         scores = defaultdict(float)
 
@@ -246,7 +259,7 @@ def query_or(inverted_index: InvertedIndex, files_path: str, query_term: str, k:
 
 
 def query_and(inverted_index: InvertedIndex, files_path: str, query_term: str, k: int = 20):
-    query_terms = [t for t in jieba.lcut(query_term) if t in inverted_index.index]
+    query_terms = [t for t in jieba.cut_for_search(query_term) if t in inverted_index.index]
     if not query_terms:
         return []
 
@@ -358,7 +371,7 @@ def evaluate(query: str) -> List[str]:
 
     if mode == "AND":
         doc_sets = [set(p.docid for p in get_postings_list(_inv.index, t))
-                    for t in jieba.lcut(query_terms) if t in _inv.index]
+                    for t in jieba.cut_for_search(query_terms) if t in _inv.index]
         common_docs = set.intersection(*doc_sets) if doc_sets else set()
         results = _inv.bm25_search(query_terms, k=20, allowed_docs=common_docs)
     else:
