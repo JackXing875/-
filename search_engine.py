@@ -48,31 +48,34 @@ def _safe_pickle_dump(obj, path):
         raise
 
 def get_text(fpath: str) -> Tuple[str, str]:
-    """读取HTML并返回 (标题, 正文+meta信息)"""
+    """读取 HTML 并返回 (标题, 正文+meta信息+td信息)"""
     with open(fpath, "r", encoding="utf-8") as f:
         html = f.read()
     soup = BeautifulSoup(html, "lxml")
 
     title = soup.title.string.strip() if soup.title else ""
 
-    # 针对科研处等情况
     if title in ["科研处", "中国人民大学科研处"]:
         h3 = soup.find("h3")
         if h3 and h3.get_text(strip=True):
             title = h3.get_text(strip=True)
 
-    # 提取正文
+    # 正文
     body = " ".join(p.get_text(strip=True) for p in soup.find_all("p"))
 
-    # 提取 meta keywords 和 description
+    # 表格 td 内容
+    td_content = " ".join(td.get_text(strip=True) for td in soup.find_all("td"))
+    td_content_weighted = (td_content + " ")  
+    # meta 信息
     meta_keywords = " ".join([m["content"] for m in soup.find_all("meta", attrs={"name": "keywords"}) if m.get("content")])
     meta_description = " ".join([m["content"] for m in soup.find_all("meta", attrs={"name": "description"}) if m.get("content")])
-
-    # 将 meta 信息拼接到正文（可以给它加权重）
     extra = (meta_keywords + " ") * 3 + (meta_description + " ") * 2
-    body = extra + body  
 
-    return title, body
+    # 拼接正文 + td + meta
+    full_body = extra + body + " " + td_content_weighted
+
+    return title, full_body
+
 
 
     return title, body
